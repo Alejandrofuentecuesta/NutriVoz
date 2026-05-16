@@ -1,5 +1,6 @@
 node_modules/
 .expo/
+android/local.properties
 dist/
 .env
 *.jks
