@@ -1,6 +1,10 @@
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
+async function getApiKey(): Promise<string> {
+  const stored = await AsyncStorage.getItem('openai_api_key');
+  return stored?.trim() || process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+}
 
 export type NutritionData = {
   description: string;
@@ -26,6 +30,7 @@ export type ParsedEntry =
 
 // Step 1: Transcribe audio with Whisper
 export async function transcribeAudio(audioUri: string): Promise<string> {
+  const apiKey = await getApiKey();
   const formData = new FormData();
 
   // Read file and append
@@ -40,7 +45,7 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: formData,
   });
@@ -56,6 +61,7 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
 
 // Step 2: Parse the transcript with GPT-4o
 export async function parseTranscript(transcript: string): Promise<ParsedEntry> {
+  const apiKey = await getApiKey();
   const systemPrompt = `Eres un asistente de nutrición y fitness. El usuario te dirá en lenguaje natural lo que ha comido o qué ejercicio ha hecho.
 
 Tu tarea es extraer la información y responder SOLO con un JSON válido, sin texto adicional, sin markdown, sin backticks.
@@ -93,7 +99,7 @@ Para las calorías y macros, usa valores medios realistas para España. Si el us
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: 'gpt-4o',
