@@ -1,4 +1,3 @@
-import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 async function getApiKey(): Promise<string> {
@@ -124,7 +123,14 @@ Para las calorías y macros, usa valores medios realistas para España. Si el us
 
   try {
     const parsed = JSON.parse(content.trim());
-    return parsed as ParsedEntry;
+    if (parsed.type === 'food') {
+      const { type: _t, ...fields } = parsed;
+      return { type: 'food', data: fields } as ParsedEntry;
+    } else if (parsed.type === 'exercise') {
+      const { type: _t, ...fields } = parsed;
+      return { type: 'exercise', data: fields } as ParsedEntry;
+    }
+    return { type: 'unknown', raw: transcript };
   } catch {
     return { type: 'unknown', raw: transcript };
   }

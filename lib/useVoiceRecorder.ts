@@ -3,6 +3,29 @@ import { Audio } from 'expo-av';
 
 export type RecordingState = 'idle' | 'recording' | 'processing';
 
+const RECORDING_OPTIONS: Audio.RecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: '.m4a',
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {},
+};
+
 export function useVoiceRecorder() {
   const [state, setState] = useState<RecordingState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -22,14 +45,13 @@ export function useVoiceRecorder() {
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
       recordingRef.current = recording;
       setState('recording');
-    } catch (e) {
-      setError('Error al iniciar la grabación.');
-      console.error(e);
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      setError(`Error al iniciar la grabación: ${msg}`);
+      console.error('startRecording error:', e);
     }
   }, []);
 
@@ -42,8 +64,8 @@ export function useVoiceRecorder() {
       recordingRef.current = null;
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
       return uri ?? null;
-    } catch (e) {
-      setError('Error al detener la grabación.');
+    } catch (e: any) {
+      setError(`Error al detener la grabación: ${e?.message ?? String(e)}`);
       setState('idle');
       return null;
     }
