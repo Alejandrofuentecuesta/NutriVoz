@@ -48,6 +48,10 @@ export default function Layout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="weight"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }

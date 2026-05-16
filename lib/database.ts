@@ -14,6 +14,13 @@ async function initDB(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
+    CREATE TABLE IF NOT EXISTS weight_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL UNIQUE,
+      weight_kg REAL NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS food_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,
@@ -124,6 +131,22 @@ export async function deleteExerciseEntry(id: number): Promise<void> {
   await db.runAsync(`DELETE FROM exercise_entries WHERE id = ?`, [id]);
 }
 
+export async function updateFoodEntry(entry: FoodEntry): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE food_entries SET meal_type=?, description=?, calories=?, protein=?, carbs=?, fat=? WHERE id=?`,
+    [entry.meal_type, entry.description, entry.calories, entry.protein, entry.carbs, entry.fat, entry.id!]
+  );
+}
+
+export async function updateExerciseEntry(entry: ExerciseEntry): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE exercise_entries SET description=?, duration_minutes=?, calories_burned=?, exercise_type=? WHERE id=?`,
+    [entry.description, entry.duration_minutes ?? null, entry.calories_burned ?? null, entry.exercise_type ?? null, entry.id!]
+  );
+}
+
 export async function getDailyGoals(): Promise<DailyGoals> {
   const db = await getDB();
   const row = await db.getFirstAsync<DailyGoals>(`SELECT calories, protein, carbs, fat FROM daily_goals WHERE id = 1`);
@@ -161,6 +184,37 @@ export async function getWeeklySummary(): Promise<{ date: string; calories: numb
   return rows;
 }
 
+export type WeightEntry = {
+  id?: number;
+  date: string;
+  weight_kg: number;
+};
+
+export async function insertWeightEntry(entry: WeightEntry): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `INSERT INTO weight_entries (date, weight_kg) VALUES (?, ?)
+     ON CONFLICT(date) DO UPDATE SET weight_kg = excluded.weight_kg`,
+    [entry.date, entry.weight_kg]
+  );
+}
+
+export async function getWeightEntries(days: number = 30): Promise<WeightEntry[]> {
+  const db = await getDB();
+  return await db.getAllAsync<WeightEntry>(
+    `SELECT * FROM weight_entries WHERE date >= date('now', '-' || ? || ' days') ORDER BY date ASC`,
+    [days]
+  );
+}
+
+export async function getTodayWeight(date: string): Promise<WeightEntry | null> {
+  const db = await getDB();
+  return await db.getFirstAsync<WeightEntry>(
+    `SELECT * FROM weight_entries WHERE date = ?`,
+    [date]
+  ) ?? null;
+}
+
 export async function getStreak(): Promise<number> {
   const db = await getDB();
   const rows = await db.getAllAsync<{ date: string }>(
@@ -168,8 +222,11 @@ export async function getStreak(): Promise<number> {
   );
   if (rows.length === 0) return 0;
   const today = new Date().toISOString().split('T')[0];
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })();
+  // Allow streak starting from today or yesterday (if today not yet logged)
+  const startFrom = rows[0].date === today ? today : yesterday;
   let streak = 0;
-  let check = today;
+  let check = startFrom;
   for (const row of rows) {
     if (row.date === check) {
       streak++;
