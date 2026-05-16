@@ -142,16 +142,41 @@ export async function getWeeklySummary(): Promise<{ date: string; calories: numb
   const db = await getDB();
   const rows = await db.getAllAsync<{ date: string; calories: number; calories_burned: number }>(`
     SELECT
-      f.date,
-      COALESCE(SUM(f.calories), 0) as calories,
+      d.date,
+      COALESCE(f.calories, 0) as calories,
       COALESCE(e.calories_burned, 0) as calories_burned
-    FROM food_entries f
+    FROM (
+      SELECT date FROM food_entries WHERE date >= date('now', '-6 days')
+      UNION
+      SELECT date FROM exercise_entries WHERE date >= date('now', '-6 days')
+    ) d
+    LEFT JOIN (
+      SELECT date, SUM(calories) as calories FROM food_entries GROUP BY date
+    ) f ON d.date = f.date
     LEFT JOIN (
       SELECT date, SUM(calories_burned) as calories_burned FROM exercise_entries GROUP BY date
-    ) e ON f.date = e.date
-    WHERE f.date >= date('now', '-6 days')
-    GROUP BY f.date
-    ORDER BY f.date ASC
+    ) e ON d.date = e.date
+    ORDER BY d.date ASC
   `);
   return rows;
+}
+
+export async function getStreak(): Promise<number> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{ date: string }>(
+    `SELECT DISTINCT date FROM food_entries ORDER BY date DESC`
+  );
+  if (rows.length === 0) return 0;
+  const today = new Date().toISOString().split('T')[0];
+  let streak = 0;
+  let check = today;
+  for (const row of rows) {
+    if (row.date === check) {
+      streak++;
+      const d = new Date(check);
+      d.setDate(d.getDate() - 1);
+      check = d.toISOString().split('T')[0];
+    } else break;
+  }
+  return streak;
 }

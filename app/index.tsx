@@ -5,7 +5,8 @@ import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getFoodEntriesByDate, getExerciseEntriesByDate, getDailyGoals,
-  deleteFoodEntry, deleteExerciseEntry, FoodEntry, ExerciseEntry, DailyGoals
+  deleteFoodEntry, deleteExerciseEntry, getStreak,
+  FoodEntry, ExerciseEntry, DailyGoals
 } from '../lib/database';
 import { todayISO } from '../lib/utils';
 
@@ -43,15 +44,17 @@ export default function HomeScreen() {
   const [foods, setFoods] = useState<FoodEntry[]>([]);
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
   const [goals, setGoals] = useState<DailyGoals>({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
+  const [streak, setStreak] = useState(0);
   const today = todayISO();
 
   const load = useCallback(async () => {
-    const [f, e, g] = await Promise.all([
+    const [f, e, g, str] = await Promise.all([
       getFoodEntriesByDate(today),
       getExerciseEntriesByDate(today),
       getDailyGoals(),
+      getStreak(),
     ]);
-    setFoods(f); setExercises(e); setGoals(g);
+    setFoods(f); setExercises(e); setGoals(g); setStreak(str);
   }, [today]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -86,7 +89,7 @@ export default function HomeScreen() {
           </View>
           <View style={s.streak}>
             <Text style={{ fontSize: 18 }}>🔥</Text>
-            <Text style={s.streakNum}>7</Text>
+            <Text style={s.streakNum}>{streak}</Text>
             <Text style={s.streakLbl}>Racha</Text>
           </View>
         </View>
@@ -140,7 +143,7 @@ export default function HomeScreen() {
         <View style={s.card}>
           <View style={s.rowBetween}>
             <Text style={s.cardTitle}>Macronutrientes</Text>
-            <TouchableOpacity style={s.linkRow}>
+            <TouchableOpacity style={s.linkRow} onPress={() => router.push('/history')}>
               <Text style={s.linkTxt}>Más detalles</Text>
               <Ionicons name="chevron-forward" size={13} color={C.primary} />
             </TouchableOpacity>
@@ -202,7 +205,7 @@ export default function HomeScreen() {
           <View style={[s.card, { flex: 1, marginLeft: 5 }]}>
             <View style={s.rowBetween}>
               <Text style={s.cardTitle}>Ejercicio</Text>
-              <TouchableOpacity style={s.linkRow}>
+              <TouchableOpacity style={s.linkRow} onPress={() => router.push('/history')}>
                 <Text style={s.linkTxt}>Ver todas</Text>
                 <Ionicons name="chevron-forward" size={13} color={C.primary} />
               </TouchableOpacity>

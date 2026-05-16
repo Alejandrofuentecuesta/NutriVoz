@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 async function getApiKey(): Promise<string> {
   const stored = await AsyncStorage.getItem('openai_api_key');
-  return stored?.trim() || process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+  const key = stored?.trim() || process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+  if (!key) throw new Error('API key no configurada. Ve a Ajustes y añade tu key de OpenAI.');
+  return key;
 }
 
 export type NutritionData = {

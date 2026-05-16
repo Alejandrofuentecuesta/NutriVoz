@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Audio } from 'expo-av';
 
 export type RecordingState = 'idle' | 'recording' | 'processing';
@@ -52,6 +52,15 @@ export function useVoiceRecorder() {
   const reset = useCallback(() => {
     setState('idle');
     setError(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
+      }
+    };
   }, []);
 
   return { state, error, startRecording, stopRecording, reset };
