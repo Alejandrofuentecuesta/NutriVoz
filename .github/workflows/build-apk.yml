@@ -46,7 +46,11 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -100
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Find APK
+        if: always()
+        run: find . -name "*.apk" 2>/dev/null || echo "No APK found"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
