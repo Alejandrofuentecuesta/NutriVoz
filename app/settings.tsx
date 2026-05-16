@@ -1,0 +1,178 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  Alert, ScrollView, KeyboardAvoidingView, Platform
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { getDailyGoals, updateDailyGoals, DailyGoals } from '../lib/database';
+
+const C = {
+  bg: '#F2F3F7', white: '#FFFFFF', primary: '#3B5BDB',
+  green: '#2DC653', text: '#1A1A2E', muted: '#6B7280', border: '#F0F0F5',
+};
+
+export default function SettingsScreen() {
+  const [apiKey, setApiKey] = useState('');
+  const [goals, setGoals] = useState<DailyGoals>({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
+  const [saved, setSaved] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+
+  useFocusEffect(useCallback(() => {
+    getDailyGoals().then(setGoals);
+    AsyncStorage.getItem('openai_api_key').then(k => { if (k) setApiKey(k); });
+  }, []));
+
+  const save = async () => {
+    try {
+      await AsyncStorage.setItem('openai_api_key', apiKey.trim());
+      await updateDailyGoals(goals);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      Alert.alert('Error', 'No se pudieron guardar los ajustes.');
+    }
+  };
+
+  const updateGoal = (key: keyof DailyGoals, val: string) => {
+    setGoals(g => ({ ...g, [key]: parseFloat(val) || 0 }));
+  };
+
+  const GOAL_FIELDS: { key: keyof DailyGoals; label: string; icon: string; color: string; bg: string }[] = [
+    { key: 'calories', label: 'Calorías',       icon: 'flame',       color: '#FF6B35', bg: '#FFF7ED' },
+    { key: 'protein',  label: 'Proteína (g)',    icon: 'barbell',     color: '#8B5CF6', bg: '#EDE9FE' },
+    { key: 'carbs',    label: 'Carbos (g)',      icon: 'leaf',        color: '#3B82F6', bg: '#DBEAFE' },
+    { key: 'fat',      label: 'Grasas (g)',      icon: 'water',       color: '#F59E0B', bg: '#FEF3C7' },
+  ];
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView style={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          <Text style={s.title}>Ajustes</Text>
+
+          {/* API Key */}
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={[s.pill, { backgroundColor: '#EDE9FE' }]}>
+                <Ionicons name="key-outline" size={12} color="#8B5CF6" />
+                <Text style={[s.pillTxt, { color: '#8B5CF6' }]}>OpenAI API Key</Text>
+              </View>
+            </View>
+            <Text style={s.hint}>
+              Necesitas una key de platform.openai.com para la transcripción (Whisper) y análisis de macros (GPT-4o).
+            </Text>
+            <View style={s.inputRow}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                value={apiKey}
+                onChangeText={setApiKey}
+                placeholder="sk-proj-..."
+                placeholderTextColor="#D1D5DB"
+                secureTextEntry={!showKey}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={s.eyeBtn} onPress={() => setShowKey(v => !v)}>
+                <Ionicons name={showKey ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.muted} />
+              </TouchableOpacity>
+            </View>
+            <View style={s.infoBox}>
+              <Ionicons name="shield-checkmark-outline" size={14} color="#10B981" />
+              <Text style={s.infoTxt}>Tu key se guarda solo en este dispositivo, nunca se envía a ningún servidor nuestro.</Text>
+            </View>
+          </View>
+
+          {/* Goals */}
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={[s.pill, { backgroundColor: '#DBEAFE' }]}>
+                <Ionicons name="trophy-outline" size={12} color="#3B82F6" />
+                <Text style={[s.pillTxt, { color: '#3B82F6' }]}>Objetivos diarios</Text>
+              </View>
+            </View>
+            <View style={s.goalsGrid}>
+              {GOAL_FIELDS.map(f => (
+                <View key={f.key} style={s.goalCard}>
+                  <View style={[s.goalIcon, { backgroundColor: f.bg }]}>
+                    <Ionicons name={f.icon as any} size={16} color={f.color} />
+                  </View>
+                  <Text style={s.goalLabel}>{f.label}</Text>
+                  <TextInput
+                    style={s.goalInput}
+                    value={String(goals[f.key])}
+                    onChangeText={v => updateGoal(f.key, v)}
+                    keyboardType="numeric"
+                    selectTextOnFocus
+                  />
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* About */}
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={[s.pill, { backgroundColor: '#D1FAE5' }]}>
+                <Ionicons name="information-circle-outline" size={12} color="#10B981" />
+                <Text style={[s.pillTxt, { color: '#10B981' }]}>Sobre NutriVoz</Text>
+              </View>
+            </View>
+            {[
+              { icon: 'mic-outline',      color: '#8B5CF6', bg: '#EDE9FE', txt: 'Whisper API convierte tu voz en texto con alta precisión en español.' },
+              { icon: 'sparkles-outline', color: '#3B82F6', bg: '#DBEAFE', txt: 'GPT-4o extrae calorías y macros de forma inteligente.' },
+              { icon: 'phone-portrait-outline', color: '#10B981', bg: '#D1FAE5', txt: 'Todo se guarda localmente. Sin servidores ni cuentas.' },
+              { icon: 'cash-outline',     color: '#F59E0B', bg: '#FEF3C7', txt: 'Coste estimado: ~0.01€ por registro de voz.' },
+            ].map((item, i) => (
+              <View key={i} style={s.aboutRow}>
+                <View style={[s.aboutIcon, { backgroundColor: item.bg }]}>
+                  <Ionicons name={item.icon as any} size={16} color={item.color} />
+                </View>
+                <Text style={s.aboutTxt}>{item.txt}</Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity style={[s.saveBtn, saved && s.saveBtnOk]} onPress={save}>
+            {saved
+              ? <><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={s.saveBtnTxt}>¡Guardado!</Text></>
+              : <Text style={s.saveBtnTxt}>Guardar cambios</Text>
+            }
+          </TouchableOpacity>
+
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  safe:        { flex: 1, backgroundColor: C.bg },
+  scroll:      { flex: 1, paddingHorizontal: 16 },
+  title:       { fontSize: 32, fontWeight: '800', color: C.text, paddingTop: 16, marginBottom: 20 },
+  card:        { backgroundColor: C.white, borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  cardHeader:  { marginBottom: 12 },
+  pill:        { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  pillTxt:     { fontSize: 12, fontWeight: '600' },
+  hint:        { fontSize: 13, color: C.muted, lineHeight: 18, marginBottom: 12 },
+  inputRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  input:       { backgroundColor: C.bg, borderRadius: 12, padding: 12, fontSize: 14, color: C.text },
+  eyeBtn:      { padding: 10 },
+  infoBox:     { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#F0FDF4', borderRadius: 10, padding: 10 },
+  infoTxt:     { fontSize: 12, color: '#166534', flex: 1, lineHeight: 16 },
+  goalsGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  goalCard:    { width: '47%', backgroundColor: C.bg, borderRadius: 14, padding: 12, alignItems: 'center', gap: 6 },
+  goalIcon:    { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  goalLabel:   { fontSize: 11, color: C.muted, textAlign: 'center' },
+  goalInput:   { fontSize: 20, fontWeight: '800', color: C.text, textAlign: 'center' },
+  aboutRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  aboutIcon:   { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  aboutTxt:    { fontSize: 13, color: C.muted, flex: 1, lineHeight: 18 },
+  saveBtn:     { backgroundColor: C.primary, borderRadius: 16, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  saveBtnOk:   { backgroundColor: C.green },
+  saveBtnTxt:  { color: '#fff', fontWeight: '700', fontSize: 16 },
+});
