@@ -7,23 +7,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { getDailyGoals, updateDailyGoals, DailyGoals, exportAllData } from '../lib/database';
-import { GPT_MODELS, GptModelId, DEFAULT_MODEL } from '../lib/openai';
+import { getDailyGoals, updateDailyGoals, DailyGoals, exportAllData, importAllData } from '../lib/database';
+import { GPT_MODEL_GROUPS, GptModelId, DEFAULT_MODEL } from '../lib/openai';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 
 const C = {
   bg: '#F2F3F7', white: '#FFFFFF', primary: '#3B5BDB',
   green: '#2DC653', text: '#1A1A2E', muted: '#6B7280', border: '#F0F0F5',
+  orange: '#FF6B35',
 };
 
 export default function SettingsScreen() {
-  const [apiKey, setApiKey]     = useState('');
-  const [model, setModel]       = useState<GptModelId>(DEFAULT_MODEL);
-  const [goals, setGoals]       = useState<DailyGoals>({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
-  const [saved, setSaved]       = useState(false);
-  const [showKey, setShowKey]   = useState(false);
+  const [apiKey, setApiKey]       = useState('');
+  const [model, setModel]         = useState<GptModelId>(DEFAULT_MODEL);
+  const [goals, setGoals]         = useState<DailyGoals>({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
+  const [saved, setSaved]         = useState(false);
+  const [showKey, setShowKey]     = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useFocusEffect(useCallback(() => {
     getDailyGoals().then(setGoals);
@@ -61,9 +64,48 @@ export default function SettingsScreen() {
       }
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'No se pudo exportar.');
-    } finally {
-      setExporting(false);
-    }
+    } finally { setExporting(false); }
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const content = await FileSystem.readAsStringAsync(result.assets[0].uri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      const backup = JSON.parse(content);
+
+      if (!backup.version || !backup.exported_at) {
+        Alert.alert('Archivo inválido', 'El archivo no parece ser un backup de NutriVoz.');
+        return;
+      }
+
+      Alert.alert(
+        'Importar datos',
+        `Backup del ${backup.exported_at.split('T')[0]}.\n\nSe añadirán los registros al historial actual (sin borrar los existentes). ¿Continuar?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Importar', onPress: async () => {
+              try {
+                const { foods, exercises, weights } = await importAllData(backup);
+                Alert.alert('✅ Importado', `${foods} comidas, ${exercises} ejercicios, ${weights} pesos restaurados.`);
+              } catch (e: any) {
+                Alert.alert('Error', e.message ?? 'No se pudo importar el backup.');
+              }
+            }
+          },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'No se pudo leer el archivo.');
+    } finally { setImporting(false); }
   };
 
   const updateGoal = (key: keyof DailyGoals, val: string) => {
@@ -116,7 +158,7 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Model selector */}
+          {/* Model selector — grouped */}
           <View style={s.card}>
             <View style={s.cardHeader}>
               <View style={[s.pill, { backgroundColor: '#DBEAFE' }]}>
@@ -124,27 +166,32 @@ export default function SettingsScreen() {
                 <Text style={[s.pillTxt, { color: '#3B82F6' }]}>Modelo de IA</Text>
               </View>
             </View>
-            <Text style={s.hint}>Elige el modelo que usará la app para analizar tus comidas y dar sugerencias.</Text>
-            {GPT_MODELS.map(m => {
-              const active = model === m.id;
-              return (
-                <TouchableOpacity
-                  key={m.id}
-                  style={[s.modelRow, active && s.modelRowActive]}
-                  onPress={() => setModel(m.id)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[s.modelRadio, active && s.modelRadioActive]}>
-                    {active && <View style={s.modelRadioDot} />}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.modelName, active && { color: C.primary }]}>{m.label}</Text>
-                    <Text style={s.modelDesc}>{m.desc}</Text>
-                  </View>
-                  {active && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
-                </TouchableOpacity>
-              );
-            })}
+            <Text style={s.hint}>Elige el modelo para analizar tus comidas y dar sugerencias. Los modelos más nuevos son más potentes pero también más caros.</Text>
+            {GPT_MODEL_GROUPS.map(group => (
+              <View key={group.group}>
+                <Text style={s.groupLabel}>{group.group}</Text>
+                {group.models.map(m => {
+                  const active = model === m.id;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[s.modelRow, active && s.modelRowActive]}
+                      onPress={() => setModel(m.id as GptModelId)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[s.modelRadio, active && s.modelRadioActive]}>
+                        {active && <View style={s.modelRadioDot} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.modelName, active && { color: C.primary }]}>{m.label}</Text>
+                        <Text style={s.modelDesc}>{m.desc}</Text>
+                      </View>
+                      {active && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
           </View>
 
           {/* Goals */}
@@ -174,7 +221,7 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Backup & Export */}
+          {/* Backup & Restore */}
           <View style={s.card}>
             <View style={s.cardHeader}>
               <View style={[s.pill, { backgroundColor: '#D1FAE5' }]}>
@@ -182,9 +229,12 @@ export default function SettingsScreen() {
                 <Text style={[s.pillTxt, { color: '#10B981' }]}>Datos y backup</Text>
               </View>
             </View>
-            <Text style={s.hint}>
-              Exporta todos tus datos (comidas, ejercicio, peso, objetivos) a un archivo JSON. Guárdalo donde quieras para no perderlo al reinstalar la app.
-            </Text>
+            <View style={s.warningBox}>
+              <Ionicons name="warning-outline" size={14} color="#92400E" />
+              <Text style={s.warningTxt}>
+                Los datos se guardan localmente. Si desinstales la app los perderás. Exporta el backup regularmente y guárdalo en Google Drive o similar para poder recuperarlos.
+              </Text>
+            </View>
             <TouchableOpacity
               style={[s.exportBtn, exporting && { opacity: 0.6 }]}
               onPress={handleExport}
@@ -193,6 +243,16 @@ export default function SettingsScreen() {
               {exporting
                 ? <ActivityIndicator color="#fff" size="small" />
                 : <><Ionicons name="download-outline" size={18} color="#fff" /><Text style={s.exportBtnTxt}>Exportar mis datos (JSON)</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.importBtn, importing && { opacity: 0.6 }]}
+              onPress={handleImport}
+              disabled={importing}
+            >
+              {importing
+                ? <ActivityIndicator color={C.primary} size="small" />
+                : <><Ionicons name="cloud-upload-outline" size={18} color={C.primary} /><Text style={s.importBtnTxt}>Restaurar desde backup</Text></>
               }
             </TouchableOpacity>
           </View>
@@ -248,7 +308,8 @@ const s = StyleSheet.create({
   eyeBtn:         { padding: 10 },
   infoBox:        { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#F0FDF4', borderRadius: 10, padding: 10 },
   infoTxt:        { fontSize: 12, color: '#166534', flex: 1, lineHeight: 16 },
-  modelRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, marginBottom: 8 },
+  groupLabel:     { fontSize: 11, fontWeight: '700', color: C.muted, marginTop: 10, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modelRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, marginBottom: 6 },
   modelRowActive: { borderColor: C.primary, backgroundColor: '#EEF2FF' },
   modelRadio:     { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   modelRadioActive:{ borderColor: C.primary },
@@ -260,8 +321,12 @@ const s = StyleSheet.create({
   goalIcon:       { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   goalLabel:      { fontSize: 11, color: C.muted, textAlign: 'center' },
   goalInput:      { fontSize: 20, fontWeight: '800', color: C.text, textAlign: 'center' },
-  exportBtn:      { backgroundColor: '#10B981', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  warningBox:     { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 10, padding: 10, marginBottom: 12 },
+  warningTxt:     { color: '#92400E', fontSize: 12, flex: 1, lineHeight: 17 },
+  exportBtn:      { backgroundColor: '#10B981', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 },
   exportBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 15 },
+  importBtn:      { backgroundColor: '#EEF2FF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: C.primary },
+  importBtnTxt:   { color: C.primary, fontWeight: '700', fontSize: 15 },
   aboutRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
   aboutIcon:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   aboutTxt:       { fontSize: 13, color: C.muted, flex: 1, lineHeight: 18 },

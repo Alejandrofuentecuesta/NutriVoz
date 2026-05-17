@@ -1,10 +1,39 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const GPT_MODELS = [
-  { id: 'gpt-4o-mini', label: 'GPT-4o Mini',  desc: 'Rápido y económico (~10x más barato)' },
-  { id: 'gpt-4o',      label: 'GPT-4o',        desc: 'Equilibrio calidad/precio (recomendado)' },
-  { id: 'o4-mini',     label: 'o4-mini',        desc: 'Razonamiento avanzado, más preciso' },
+export const GPT_MODEL_GROUPS = [
+  {
+    group: 'GPT-5.5 (2026)',
+    models: [
+      { id: 'gpt-5.5',          label: 'GPT-5.5',           desc: 'Mejor opción general — $5/$30 por 1M tokens' },
+      { id: 'gpt-5.5-pro',      label: 'GPT-5.5 Pro',       desc: 'Máxima calidad, más lento — $30/$180 por 1M' },
+    ],
+  },
+  {
+    group: 'GPT-5.4 (2026)',
+    models: [
+      { id: 'gpt-5.4',          label: 'GPT-5.4',           desc: 'Potente y algo más barato — $2.50/$15 por 1M' },
+      { id: 'gpt-5.4-mini',     label: 'GPT-5.4 Mini',      desc: 'Buena relación coste/calidad — $0.75/$4.50' },
+      { id: 'gpt-5.4-nano',     label: 'GPT-5.4 Nano',      desc: 'Muy barato para tareas simples — $0.20/$1.25' },
+    ],
+  },
+  {
+    group: 'GPT-4.1',
+    models: [
+      { id: 'gpt-4.1',          label: 'GPT-4.1',           desc: 'Excelente en instrucciones, 1M contexto' },
+      { id: 'gpt-4.1-mini',     label: 'GPT-4.1 Mini',      desc: 'Rápido y económico' },
+      { id: 'gpt-4.1-nano',     label: 'GPT-4.1 Nano',      desc: 'El más barato de la familia 4.1' },
+    ],
+  },
+  {
+    group: 'GPT-4o',
+    models: [
+      { id: 'gpt-4o',           label: 'GPT-4o',            desc: 'Equilibrio calidad/precio (recomendado)' },
+      { id: 'gpt-4o-mini',      label: 'GPT-4o Mini',       desc: 'Muy económico, ideal para uso frecuente' },
+    ],
+  },
 ] as const;
+
+export const GPT_MODELS = GPT_MODEL_GROUPS.flatMap(g => g.models);
 
 export type GptModelId = typeof GPT_MODELS[number]['id'];
 

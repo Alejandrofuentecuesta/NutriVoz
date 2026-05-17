@@ -240,6 +240,64 @@ export async function exportAllData(): Promise<object> {
   };
 }
 
+type BackupData = {
+  version: number;
+  daily_goals?: { calories: number; protein: number; carbs: number; fat: number };
+  food_entries?: any[];
+  exercise_entries?: any[];
+  weight_entries?: any[];
+};
+
+export async function importAllData(backup: BackupData): Promise<{ foods: number; exercises: number; weights: number }> {
+  const db = await getDB();
+  let foods = 0, exercises = 0, weights = 0;
+
+  await db.execAsync('BEGIN TRANSACTION');
+  try {
+    if (backup.daily_goals) {
+      const g = backup.daily_goals;
+      await db.runAsync(
+        `UPDATE daily_goals SET calories=?, protein=?, carbs=?, fat=? WHERE id=1`,
+        [g.calories, g.protein, g.carbs, g.fat]
+      );
+    }
+
+    for (const f of backup.food_entries ?? []) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO food_entries (date, meal_type, description, calories, protein, carbs, fat, raw_transcript, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [f.date, f.meal_type, f.description, f.calories, f.protein, f.carbs, f.fat, f.raw_transcript ?? null, f.created_at ?? null]
+      );
+      foods++;
+    }
+
+    for (const e of backup.exercise_entries ?? []) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO exercise_entries (date, description, duration_minutes, calories_burned, exercise_type, raw_transcript, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [e.date, e.description, e.duration_minutes ?? null, e.calories_burned ?? null, e.exercise_type ?? null, e.raw_transcript ?? null, e.created_at ?? null]
+      );
+      exercises++;
+    }
+
+    for (const w of backup.weight_entries ?? []) {
+      await db.runAsync(
+        `INSERT INTO weight_entries (date, weight_kg) VALUES (?, ?)
+         ON CONFLICT(date) DO UPDATE SET weight_kg = excluded.weight_kg`,
+        [w.date, w.weight_kg]
+      );
+      weights++;
+    }
+
+    await db.execAsync('COMMIT');
+  } catch (e) {
+    await db.execAsync('ROLLBACK');
+    throw e;
+  }
+
+  return { foods, exercises, weights };
+}
+
 export async function getWeightEntries(days: number = 30): Promise<WeightEntry[]> {
   const db = await getDB();
   return await db.getAllAsync<WeightEntry>(
