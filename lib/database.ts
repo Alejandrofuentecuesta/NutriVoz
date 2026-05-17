@@ -18,6 +18,7 @@ async function initDB(db: SQLite.SQLiteDatabase) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL UNIQUE,
       weight_kg REAL NOT NULL,
+      photo_uri TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -56,6 +57,12 @@ async function initDB(db: SQLite.SQLiteDatabase) {
     INSERT OR IGNORE INTO daily_goals (id, calories, protein, carbs, fat)
     VALUES (1, 2000, 150, 200, 65);
   `);
+  // Migrate: add photo_uri column if it doesn't exist yet (safe on existing installs)
+  try {
+    await db.execAsync(`ALTER TABLE weight_entries ADD COLUMN photo_uri TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 export type FoodEntry = {
@@ -188,15 +195,49 @@ export type WeightEntry = {
   id?: number;
   date: string;
   weight_kg: number;
+  photo_uri?: string | null;
 };
 
 export async function insertWeightEntry(entry: WeightEntry): Promise<void> {
   const db = await getDB();
   await db.runAsync(
-    `INSERT INTO weight_entries (date, weight_kg) VALUES (?, ?)
-     ON CONFLICT(date) DO UPDATE SET weight_kg = excluded.weight_kg`,
-    [entry.date, entry.weight_kg]
+    `INSERT INTO weight_entries (date, weight_kg, photo_uri) VALUES (?, ?, ?)
+     ON CONFLICT(date) DO UPDATE SET weight_kg = excluded.weight_kg, photo_uri = COALESCE(excluded.photo_uri, weight_entries.photo_uri)`,
+    [entry.date, entry.weight_kg, entry.photo_uri ?? null]
   );
+}
+
+export async function updateWeightPhoto(date: string, photo_uri: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`UPDATE weight_entries SET photo_uri = ? WHERE date = ?`, [photo_uri, date]);
+}
+
+export async function getDatesWithData(): Promise<string[]> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{ date: string }>(
+    `SELECT DISTINCT date FROM food_entries
+     UNION SELECT DISTINCT date FROM exercise_entries
+     ORDER BY date DESC`
+  );
+  return rows.map(r => r.date);
+}
+
+export async function exportAllData(): Promise<object> {
+  const db = await getDB();
+  const [foods, exercises, weights, goals] = await Promise.all([
+    db.getAllAsync(`SELECT * FROM food_entries ORDER BY date, created_at`),
+    db.getAllAsync(`SELECT * FROM exercise_entries ORDER BY date, created_at`),
+    db.getAllAsync(`SELECT date, weight_kg FROM weight_entries ORDER BY date`),
+    db.getFirstAsync(`SELECT calories, protein, carbs, fat FROM daily_goals WHERE id = 1`),
+  ]);
+  return {
+    exported_at: new Date().toISOString(),
+    version: 1,
+    daily_goals: goals,
+    food_entries: foods,
+    exercise_entries: exercises,
+    weight_entries: weights,
+  };
 }
 
 export async function getWeightEntries(days: number = 30): Promise<WeightEntry[]> {

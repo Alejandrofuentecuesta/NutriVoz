@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, useWindowDimensions
+  TextInput, Alert, ActivityIndicator, useWindowDimensions, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Polyline, Circle as SvgCircle, Line, Text as SvgText } from 'react-native-svg';
-import { insertWeightEntry, getWeightEntries, WeightEntry } from '../lib/database';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { insertWeightEntry, updateWeightPhoto, getWeightEntries, WeightEntry } from '../lib/database';
 import { todayISO, formatDate } from '../lib/utils';
 
 const C = {
@@ -33,21 +35,15 @@ function WeightChart({ entries }: { entries: WeightEntry[] }) {
   const minW = Math.min(...weights) - 0.5;
   const maxW = Math.max(...weights) + 0.5;
   const range = maxW - minW || 1;
-
   const innerW = CHART_W - PAD.left - PAD.right;
   const innerH = CHART_H - PAD.top - PAD.bottom;
-
   const toX = (i: number) => PAD.left + (i / (entries.length - 1)) * innerW;
   const toY = (w: number) => PAD.top + (1 - (w - minW) / range) * innerH;
-
   const points = entries.map((e, i) => `${toX(i)},${toY(e.weight_kg)}`).join(' ');
-
-  // Show only first, middle and last labels to avoid overlap
   const labelIdxs = [0, Math.floor((entries.length - 1) / 2), entries.length - 1].filter((v, i, a) => a.indexOf(v) === i);
 
   return (
     <Svg width={CHART_W} height={CHART_H}>
-      {/* Horizontal guide lines */}
       {[0, 0.5, 1].map(t => {
         const y = PAD.top + t * innerH;
         const w = minW + (1 - t) * range;
@@ -58,13 +54,10 @@ function WeightChart({ entries }: { entries: WeightEntry[] }) {
           </React.Fragment>
         );
       })}
-      {/* Line */}
       <Polyline points={points} fill="none" stroke={C.primary} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-      {/* Dots */}
       {entries.map((e, i) => (
         <SvgCircle key={i} cx={toX(i)} cy={toY(e.weight_kg)} r={4} fill={C.primary} stroke={C.white} strokeWidth={2} />
       ))}
-      {/* X labels */}
       {labelIdxs.map(i => (
         <SvgText key={i} x={toX(i)} y={CHART_H - 6} fontSize={9} fill={C.muted} textAnchor="middle">
           {formatDate(entries[i].date).slice(0, 5)}
@@ -74,10 +67,20 @@ function WeightChart({ entries }: { entries: WeightEntry[] }) {
   );
 }
 
+async function savePhotoLocally(uri: string, date: string): Promise<string> {
+  const dir = FileSystem.documentDirectory + 'weight_photos/';
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  const dest = dir + `weight_${date}.jpg`;
+  await FileSystem.copyAsync({ from: uri, to: dest });
+  return dest;
+}
+
 export default function WeightScreen() {
-  const [entries, setEntries] = useState<WeightEntry[]>([]);
-  const [input, setInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [entries, setEntries]   = useState<WeightEntry[]>([]);
+  const [input, setInput]       = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [addingPhoto, setAddingPhoto] = useState(false);
   const today = todayISO();
 
   const load = useCallback(async () => {
@@ -105,9 +108,63 @@ export default function WeightScreen() {
     } finally { setSaving(false); }
   };
 
-  const latest = entries.length > 0 ? entries[entries.length - 1] : null;
-  const prev    = entries.length > 1 ? entries[entries.length - 2] : null;
-  const diff    = latest && prev ? (latest.weight_kg - prev.weight_kg) : null;
+  const pickPhoto = async (date: string) => {
+    setAddingPhoto(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Necesitas dar acceso a la galería en ajustes.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const localUri = await savePhotoLocally(result.assets[0].uri, date);
+      await updateWeightPhoto(date, localUri);
+      await load();
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar la foto.');
+    } finally { setAddingPhoto(false); }
+  };
+
+  const takePhoto = async (date: string) => {
+    setAddingPhoto(true);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Necesitas dar acceso a la cámara en ajustes.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const localUri = await savePhotoLocally(result.assets[0].uri, date);
+      await updateWeightPhoto(date, localUri);
+      await load();
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar la foto.');
+    } finally { setAddingPhoto(false); }
+  };
+
+  const promptPhoto = (date: string) => {
+    Alert.alert('Añadir foto', 'Elige cómo añadir la foto de progreso:', [
+      { text: 'Cámara',   onPress: () => takePhoto(date) },
+      { text: 'Galería',  onPress: () => pickPhoto(date) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const latest   = entries.length > 0 ? entries[entries.length - 1] : null;
+  const prev     = entries.length > 1 ? entries[entries.length - 2] : null;
+  const diff     = latest && prev ? (latest.weight_kg - prev.weight_kg) : null;
+  const todayEntry = entries.find(e => e.date === today);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -144,11 +201,31 @@ export default function WeightScreen() {
               onPress={save}
               disabled={!input.trim() || saving}
             >
-              {saving
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={s.saveBtnTxt}>Guardar</Text>
-              }
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnTxt}>Guardar</Text>}
             </TouchableOpacity>
+          </View>
+
+          {/* Photo for today */}
+          <View style={s.photoRow}>
+            {todayEntry?.photo_uri ? (
+              <TouchableOpacity onPress={() => promptPhoto(today)} style={s.photoThumbWrap}>
+                <Image source={{ uri: todayEntry.photo_uri }} style={s.photoThumb} />
+                <View style={s.photoEditBadge}>
+                  <Ionicons name="camera" size={12} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[s.addPhotoBtn, addingPhoto && { opacity: 0.5 }]}
+                onPress={() => promptPhoto(today)}
+                disabled={addingPhoto}
+              >
+                {addingPhoto
+                  ? <ActivityIndicator size="small" color={C.primary} />
+                  : <><Ionicons name="camera-outline" size={16} color={C.primary} /><Text style={s.addPhotoBtnTxt}>Añadir foto de progreso</Text></>
+                }
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -187,12 +264,19 @@ export default function WeightScreen() {
           <WeightChart entries={entries} />
         </View>
 
-        {/* History list */}
+        {/* History list with photo thumbnails */}
         {entries.length > 0 && (
           <View style={s.card}>
             <Text style={s.cardTitle}>Historial</Text>
             {[...entries].reverse().slice(0, 14).map(e => (
               <View key={e.date} style={s.histRow}>
+                {e.photo_uri ? (
+                  <Image source={{ uri: e.photo_uri }} style={s.histThumb} />
+                ) : (
+                  <TouchableOpacity style={s.histPhotoBtn} onPress={() => promptPhoto(e.date)}>
+                    <Ionicons name="camera-outline" size={14} color={C.light} />
+                  </TouchableOpacity>
+                )}
                 <Text style={s.histDate}>{formatDate(e.date)}</Text>
                 <Text style={[s.histWeight, e.date === today && { color: C.primary, fontWeight: '800' }]}>
                   {e.weight_kg} kg
@@ -209,29 +293,37 @@ export default function WeightScreen() {
 }
 
 const s = StyleSheet.create({
-  safe:       { flex: 1, backgroundColor: C.bg },
-  scroll:     { flex: 1, paddingHorizontal: 16 },
-  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 16 },
-  backBtn:    { width: 36, height: 36, borderRadius: 12, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
-  title:      { fontSize: 22, fontWeight: '800', color: C.text },
-  card:       { backgroundColor: C.white, borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardHeader: { marginBottom: 12 },
-  cardTitle:  { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 12 },
-  pill:       { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  pillTxt:    { fontSize: 12, fontWeight: '600' },
-  inputRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  weightInput:{ flex: 1, backgroundColor: C.bg, borderRadius: 12, padding: 12, fontSize: 28, fontWeight: '800', color: C.text, textAlign: 'center' },
-  kgLabel:    { fontSize: 16, fontWeight: '600', color: C.muted },
-  saveBtn:    { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
-  saveBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  statsRow:   { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  statCard:   { flex: 1, backgroundColor: C.white, borderRadius: 14, padding: 12, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  statLabel:  { fontSize: 10, color: C.muted, marginBottom: 4 },
-  statVal:    { fontSize: 18, fontWeight: '800', color: C.text },
-  statDate:   { fontSize: 10, color: C.light, marginTop: 2 },
-  histRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
-  histDate:   { fontSize: 13, color: C.muted },
-  histWeight: { fontSize: 13, fontWeight: '700', color: C.text },
+  safe:          { flex: 1, backgroundColor: C.bg },
+  scroll:        { flex: 1, paddingHorizontal: 16 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 16 },
+  backBtn:       { width: 36, height: 36, borderRadius: 12, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
+  title:         { fontSize: 22, fontWeight: '800', color: C.text },
+  card:          { backgroundColor: C.white, borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  cardHeader:    { marginBottom: 12 },
+  cardTitle:     { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 12 },
+  pill:          { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  pillTxt:       { fontSize: 12, fontWeight: '600' },
+  inputRow:      { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  weightInput:   { flex: 1, backgroundColor: C.bg, borderRadius: 12, padding: 12, fontSize: 28, fontWeight: '800', color: C.text, textAlign: 'center' },
+  kgLabel:       { fontSize: 16, fontWeight: '600', color: C.muted },
+  saveBtn:       { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
+  saveBtnTxt:    { color: '#fff', fontWeight: '700', fontSize: 15 },
+  photoRow:      { marginTop: 12 },
+  photoThumbWrap:{ position: 'relative', alignSelf: 'flex-start' },
+  photoThumb:    { width: 72, height: 72, borderRadius: 12 },
+  photoEditBadge:{ position: 'absolute', bottom: 4, right: 4, backgroundColor: C.primary, borderRadius: 10, padding: 3 },
+  addPhotoBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EEF2FF', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, alignSelf: 'flex-start' },
+  addPhotoBtnTxt:{ fontSize: 13, color: C.primary, fontWeight: '600' },
+  statsRow:      { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  statCard:      { flex: 1, backgroundColor: C.white, borderRadius: 14, padding: 12, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  statLabel:     { fontSize: 10, color: C.muted, marginBottom: 4 },
+  statVal:       { fontSize: 18, fontWeight: '800', color: C.text },
+  statDate:      { fontSize: 10, color: C.light, marginTop: 2 },
+  histRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  histThumb:     { width: 36, height: 36, borderRadius: 8 },
+  histPhotoBtn:  { width: 36, height: 36, borderRadius: 8, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+  histDate:      { flex: 1, fontSize: 13, color: C.muted },
+  histWeight:    { fontSize: 13, fontWeight: '700', color: C.text },
 });
 
 const ch = StyleSheet.create({

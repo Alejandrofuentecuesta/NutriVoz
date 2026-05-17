@@ -1,10 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export const GPT_MODELS = [
+  { id: 'gpt-4o-mini', label: 'GPT-4o Mini',  desc: 'Rápido y económico (~10x más barato)' },
+  { id: 'gpt-4o',      label: 'GPT-4o',        desc: 'Equilibrio calidad/precio (recomendado)' },
+  { id: 'o4-mini',     label: 'o4-mini',        desc: 'Razonamiento avanzado, más preciso' },
+] as const;
+
+export type GptModelId = typeof GPT_MODELS[number]['id'];
+
+export const DEFAULT_MODEL: GptModelId = 'gpt-4o';
+
 async function getApiKey(): Promise<string> {
   const stored = await AsyncStorage.getItem('openai_api_key');
   const key = stored?.trim() || process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
   if (!key) throw new Error('API key no configurada. Ve a Ajustes y añade tu key de OpenAI.');
   return key;
+}
+
+async function getModel(): Promise<GptModelId> {
+  const stored = await AsyncStorage.getItem('openai_model');
+  const valid = GPT_MODELS.map(m => m.id) as string[];
+  if (stored && valid.includes(stored)) return stored as GptModelId;
+  return DEFAULT_MODEL;
 }
 
 export type NutritionData = {
@@ -61,9 +78,9 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
   return data.text as string;
 }
 
-// Step 2: Parse the transcript with GPT-4o — returns ARRAY of entries
+// Step 2: Parse the transcript with selected model — returns ARRAY of entries
 export async function parseTranscript(transcript: string): Promise<ParsedEntry[]> {
-  const apiKey = await getApiKey();
+  const [apiKey, model] = await Promise.all([getApiKey(), getModel()]);
   const systemPrompt = `Eres un asistente de nutrición y fitness. El usuario te dirá en lenguaje natural lo que ha comido (puede ser varias comidas del día, una receta completa con ingredientes, o un ejercicio).
 
 Tu tarea es extraer TODAS las entradas mencionadas y responder SOLO con un array JSON válido, sin texto adicional, sin markdown, sin backticks.
@@ -107,7 +124,7 @@ Reglas importantes:
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: transcript },
@@ -168,7 +185,7 @@ export type MacroSummary = {
 };
 
 export async function getSuggestion(summary: MacroSummary): Promise<string> {
-  const apiKey = await getApiKey();
+  const [apiKey, model] = await Promise.all([getApiKey(), getModel()]);
   const { consumed, goals, burned } = summary;
   const remaining = {
     calories: Math.max(goals.calories - consumed.calories + burned, 0),
@@ -192,7 +209,7 @@ Sugiere 1-2 comidas o snacks concretos y realistas para completar los objetivos 
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         { role: 'system', content: 'Eres un nutricionista experto que da sugerencias de comida concisas y realistas para España.' },
         { role: 'user', content: prompt },

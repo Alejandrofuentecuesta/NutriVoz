@@ -52,6 +52,10 @@ export default function Layout() {
         name="weight"
         options={{ href: null }}
       />
+      <Tabs.Screen
+        name="calendar"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }

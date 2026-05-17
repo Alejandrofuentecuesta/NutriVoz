@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { getWeeklySummary } from '../lib/database';
 import { formatDate } from '../lib/utils';
 
@@ -45,8 +46,16 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={s.title}>Historial</Text>
-        <Text style={s.subtitle}>Últimos 7 días</Text>
+        <View style={s.titleRow}>
+          <View>
+            <Text style={s.title}>Historial</Text>
+            <Text style={s.subtitle}>Últimos 7 días</Text>
+          </View>
+          <TouchableOpacity style={s.calBtn} onPress={() => router.push('/calendar')}>
+            <Ionicons name="calendar-outline" size={16} color={C.primary} />
+            <Text style={s.calBtnTxt}>Calendario</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Summary stats */}
         <View style={s.statsRow}>
@@ -129,8 +138,11 @@ export default function HistoryScreen() {
 const s = StyleSheet.create({
   safe:        { flex: 1, backgroundColor: C.bg },
   scroll:      { flex: 1, paddingHorizontal: 16 },
-  title:       { fontSize: 32, fontWeight: '800', color: C.text, paddingTop: 16, marginBottom: 4 },
-  subtitle:    { fontSize: 13, color: C.muted, marginBottom: 20 },
+  titleRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 16, marginBottom: 20 },
+  title:       { fontSize: 32, fontWeight: '800', color: C.text },
+  subtitle:    { fontSize: 13, color: C.muted, marginTop: 4 },
+  calBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#EEF2FF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 2 },
+  calBtnTxt:   { fontSize: 12, color: C.primary, fontWeight: '700' },
   statsRow:    { flexDirection: 'row', gap: 10, marginBottom: 12 },
   statCard:    { flex: 1, borderRadius: 14, padding: 12, alignItems: 'center' },
   statNum:     { fontSize: 20, fontWeight: '800' },
