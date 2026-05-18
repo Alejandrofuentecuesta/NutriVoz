@@ -159,7 +159,7 @@ Reglas importantes:
         { role: 'user', content: transcript },
       ],
       temperature: 0.1,
-      max_tokens: 1200,
+      max_completion_tokens: 1200,
     }),
   });
 
@@ -244,7 +244,7 @@ Sugiere 1-2 comidas o snacks concretos y realistas para completar los objetivos 
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      max_tokens: 200,
+      max_completion_tokens: 200,
     }),
   });
 

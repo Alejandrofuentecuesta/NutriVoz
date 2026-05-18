@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, useWindowDimensions, Image
+  TextInput, Alert, ActivityIndicator, useWindowDimensions, Image, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
@@ -81,6 +81,7 @@ export default function WeightScreen() {
   const [input, setInput]       = useState('');
   const [saving, setSaving]     = useState(false);
   const [addingPhoto, setAddingPhoto] = useState(false);
+  const [fullPhoto, setFullPhoto] = useState<string | null>(null);
   const today = todayISO();
 
   const load = useCallback(async () => {
@@ -168,6 +169,14 @@ export default function WeightScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {/* Fullscreen photo viewer */}
+      <Modal visible={fullPhoto !== null} transparent animationType="fade" onRequestClose={() => setFullPhoto(null)}>
+        <TouchableOpacity style={s.fullBg} activeOpacity={1} onPress={() => setFullPhoto(null)}>
+          {fullPhoto && <Image source={{ uri: fullPhoto }} style={s.fullImg} resizeMode="contain" />}
+          <View style={s.fullClose}><Ionicons name="close" size={28} color="#fff" /></View>
+        </TouchableOpacity>
+      </Modal>
+
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={s.header}>
@@ -208,11 +217,11 @@ export default function WeightScreen() {
           {/* Photo for today */}
           <View style={s.photoRow}>
             {todayEntry?.photo_uri ? (
-              <TouchableOpacity onPress={() => promptPhoto(today)} style={s.photoThumbWrap}>
+              <TouchableOpacity onPress={() => setFullPhoto(todayEntry.photo_uri!)} style={s.photoThumbWrap}>
                 <Image source={{ uri: todayEntry.photo_uri }} style={s.photoThumb} />
-                <View style={s.photoEditBadge}>
+                <TouchableOpacity style={s.photoEditBadge} onPress={() => promptPhoto(today)}>
                   <Ionicons name="camera" size={12} color="#fff" />
-                </View>
+                </TouchableOpacity>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -271,7 +280,9 @@ export default function WeightScreen() {
             {[...entries].reverse().slice(0, 14).map(e => (
               <View key={e.date} style={s.histRow}>
                 {e.photo_uri ? (
-                  <Image source={{ uri: e.photo_uri }} style={s.histThumb} />
+                  <TouchableOpacity onPress={() => setFullPhoto(e.photo_uri!)}>
+                    <Image source={{ uri: e.photo_uri }} style={s.histThumb} />
+                  </TouchableOpacity>
                 ) : (
                   <TouchableOpacity style={s.histPhotoBtn} onPress={() => promptPhoto(e.date)}>
                     <Ionicons name="camera-outline" size={14} color={C.light} />
@@ -324,6 +335,9 @@ const s = StyleSheet.create({
   histPhotoBtn:  { width: 36, height: 36, borderRadius: 8, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   histDate:      { flex: 1, fontSize: 13, color: C.muted },
   histWeight:    { fontSize: 13, fontWeight: '700', color: C.text },
+  fullBg:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  fullImg:       { width: '100%', height: '85%' },
+  fullClose:     { position: 'absolute', top: 52, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 6 },
 });
 
 const ch = StyleSheet.create({
