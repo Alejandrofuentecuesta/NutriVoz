@@ -19,16 +19,16 @@ export const GPT_MODEL_GROUPS = [
   {
     group: 'GPT-4.1',
     models: [
-      { id: 'gpt-4.1',          label: 'GPT-4.1',           desc: 'Excelente en instrucciones, 1M contexto' },
-      { id: 'gpt-4.1-mini',     label: 'GPT-4.1 Mini',      desc: 'Rápido y económico' },
-      { id: 'gpt-4.1-nano',     label: 'GPT-4.1 Nano',      desc: 'El más barato de la familia 4.1' },
+      { id: 'gpt-4.1',          label: 'GPT-4.1',           desc: 'Excelente en instrucciones — $2/$8 por 1M tokens' },
+      { id: 'gpt-4.1-mini',     label: 'GPT-4.1 Mini',      desc: 'Rápido y económico — $0.40/$1.60 por 1M' },
+      { id: 'gpt-4.1-nano',     label: 'GPT-4.1 Nano',      desc: 'El más barato de la familia 4.1 — $0.10/$0.40' },
     ],
   },
   {
     group: 'GPT-4o',
     models: [
-      { id: 'gpt-4o',           label: 'GPT-4o',            desc: 'Equilibrio calidad/precio (recomendado)' },
-      { id: 'gpt-4o-mini',      label: 'GPT-4o Mini',       desc: 'Muy económico, ideal para uso frecuente' },
+      { id: 'gpt-4o',           label: 'GPT-4o',            desc: 'Equilibrio calidad/precio — $2.50/$10 por 1M' },
+      { id: 'gpt-4o-mini',      label: 'GPT-4o Mini',       desc: 'Muy económico — $0.15/$0.60 por 1M' },
     ],
   },
 ] as const;

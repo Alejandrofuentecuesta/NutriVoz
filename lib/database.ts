@@ -212,6 +212,11 @@ export async function updateWeightPhoto(date: string, photo_uri: string): Promis
   await db.runAsync(`UPDATE weight_entries SET photo_uri = ? WHERE date = ?`, [photo_uri, date]);
 }
 
+export async function clearWeightPhoto(date: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`UPDATE weight_entries SET photo_uri = NULL WHERE date = ?`, [date]);
+}
+
 export async function getDatesWithData(): Promise<string[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<{ date: string }>(

@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Polyline, Circle as SvgCircle, Line, Text as SvgText } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { insertWeightEntry, updateWeightPhoto, getWeightEntries, WeightEntry } from '../lib/database';
+import { insertWeightEntry, updateWeightPhoto, clearWeightPhoto, getWeightEntries, WeightEntry } from '../lib/database';
 import { todayISO, formatDate } from '../lib/utils';
 
 const C = {
@@ -154,12 +154,32 @@ export default function WeightScreen() {
     } finally { setAddingPhoto(false); }
   };
 
-  const promptPhoto = (date: string) => {
-    Alert.alert('Añadir foto', 'Elige cómo añadir la foto de progreso:', [
-      { text: 'Cámara',   onPress: () => takePhoto(date) },
-      { text: 'Galería',  onPress: () => pickPhoto(date) },
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
+  const deletePhoto = async (date: string, photoUri: string) => {
+    try {
+      await FileSystem.deleteAsync(photoUri, { idempotent: true });
+      await clearWeightPhoto(date);
+      await load();
+    } catch {
+      Alert.alert('Error', 'No se pudo borrar la foto.');
+    }
+  };
+
+  const promptPhoto = (date: string, hasPhoto?: boolean) => {
+    const buttons: any[] = [
+      { text: 'Cámara',  onPress: () => takePhoto(date) },
+      { text: 'Galería', onPress: () => pickPhoto(date) },
+    ];
+    if (hasPhoto) {
+      buttons.push({
+        text: 'Borrar foto', style: 'destructive',
+        onPress: () => {
+          const entry = entries.find(e => e.date === date);
+          if (entry?.photo_uri) deletePhoto(date, entry.photo_uri);
+        },
+      });
+    }
+    buttons.push({ text: 'Cancelar', style: 'cancel' });
+    Alert.alert('Foto de progreso', hasPhoto ? 'Reemplaza o borra la foto:' : 'Elige cómo añadir la foto:', buttons);
   };
 
   const latest   = entries.length > 0 ? entries[entries.length - 1] : null;
@@ -219,7 +239,7 @@ export default function WeightScreen() {
             {todayEntry?.photo_uri ? (
               <TouchableOpacity onPress={() => setFullPhoto(todayEntry.photo_uri!)} style={s.photoThumbWrap}>
                 <Image source={{ uri: todayEntry.photo_uri }} style={s.photoThumb} />
-                <TouchableOpacity style={s.photoEditBadge} onPress={() => promptPhoto(today)}>
+                <TouchableOpacity style={s.photoEditBadge} onPress={() => promptPhoto(today, true)}>
                   <Ionicons name="camera" size={12} color="#fff" />
                 </TouchableOpacity>
               </TouchableOpacity>
@@ -280,11 +300,11 @@ export default function WeightScreen() {
             {[...entries].reverse().slice(0, 14).map(e => (
               <View key={e.date} style={s.histRow}>
                 {e.photo_uri ? (
-                  <TouchableOpacity onPress={() => setFullPhoto(e.photo_uri!)}>
+                  <TouchableOpacity onPress={() => setFullPhoto(e.photo_uri!)} onLongPress={() => promptPhoto(e.date, true)}>
                     <Image source={{ uri: e.photo_uri }} style={s.histThumb} />
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={s.histPhotoBtn} onPress={() => promptPhoto(e.date)}>
+                  <TouchableOpacity style={s.histPhotoBtn} onPress={() => promptPhoto(e.date, false)}>
                     <Ionicons name="camera-outline" size={14} color={C.light} />
                   </TouchableOpacity>
                 )}
